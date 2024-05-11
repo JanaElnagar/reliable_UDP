@@ -3,6 +3,7 @@ import json
 import random
 import binascii
 import zlib
+import time
 
 
 class UDPTCP_Server:
@@ -100,6 +101,9 @@ class UDPTCP_Server:
 
                 # Calculate checksum and include it in the ACK packet
                 ack_packet['checksum'] = self.calculate_checksum(json.dumps(ack_packet))
+
+                # Introduce a delay to test stop-and-wait
+               # time.sleep(10)  # Delay for 2 seconds
 
                 self.socket.sendto(json.dumps(ack_packet).encode(), client_address)
                 return data_packet['data']
