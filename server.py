@@ -3,10 +3,12 @@ import json
 import random
 import binascii
 import zlib
+import time
+from collections import deque
 
 
 class UDPTCP_Server:
-    def __init__(self, server_address, server_port):
+    def __init__(self, server_address, server_port, window_size):
         self.server_address = server_address
         self.server_port = server_port
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -14,6 +16,8 @@ class UDPTCP_Server:
         self.sequence_number = random.randint(0, 1000)  # Random initial sequence number
         self.ack_number = 0
         self.flags = '00000000'  # Initialize flags
+        self.window_size = window_size
+        self.window = deque(maxlen=self.window_size)  # Sliding window
 
     def display(self, packet):
         print("type: " + packet['type'])
@@ -82,30 +86,34 @@ class UDPTCP_Server:
         data, client_address = self.socket.recvfrom(1024)
         data_packet = json.loads(data.decode())
 
-        #data_packet = self.simulate_false_checksum(data_packet)    # for checksum testing
-
         # Verify checksum
         if self.verify_checksum(data_packet):
-            # Check if the sequence number is as expected
-            if data_packet['sequence_number'] == self.ack_number:
+            # Check if the sequence number is within the window
+            if self.ack_number <= data_packet['sequence_number'] < self.ack_number + self.window_size:
                 self.display(data_packet)
-                self.ack_number = data_packet['sequence_number'] + len(
-                    data_packet['data'])  # Update acknowledgment number
-                self.sequence_number = data_packet['ack_number']
-                # Send ACK packet
-                self.flags = '00010000'  # Set ACK flag
-                ack_packet = {'type': 'ACK', 'sequence_number': self.sequence_number, 'ack_number': self.ack_number,
-                              'client_ip': data_packet['client_ip'], 'client_port': data_packet['client_port'],
-                              'flags': self.flags}
+                self.window.append(data_packet)  # Add packet to window
 
-                # Calculate checksum and include it in the ACK packet
-                ack_packet['checksum'] = self.calculate_checksum(json.dumps(ack_packet))
+                # Process packets within the window
+                while len(self.window) > 0 and self.window[0]['sequence_number'] == self.ack_number:
+                    packet_to_process = self.window.popleft()
+                    self.ack_number = packet_to_process['sequence_number'] + len(packet_to_process['data'])
 
-                self.socket.sendto(json.dumps(ack_packet).encode(), client_address)
+                    # Send ACK packet
+                    self.flags = '00010000'  # Set ACK flag
+                    ack_packet = {'type': 'ACK', 'sequence_number': self.sequence_number, 'ack_number': self.ack_number,
+                                  'client_ip': packet_to_process['client_ip'], 'client_port': packet_to_process['client_port'],
+                                  'flags': self.flags}
+
+                    # Calculate checksum and include it in the ACK packet
+                    ack_packet['checksum'] = self.calculate_checksum(json.dumps(ack_packet))
+
+                    self.socket.sendto(json.dumps(ack_packet).encode(), client_address)
+                    self.display(ack_packet)
+
                 return data_packet['data']
             else:
                 # Handle out of order
-                print("retry")
+                print("Packet out of order, dropping...")
                 return False
         else:
             print("Checksum verification failed. Dropping packet.")
@@ -128,5 +136,6 @@ class UDPTCP_Server:
 
 
 if __name__ == "__main__":
-    server = UDPTCP_Server('localhost', 8000)
+    server = UDPTCP_Server('localhost', 8000, window_size=5)  # Provide the window_size argument
     server.start()
+
