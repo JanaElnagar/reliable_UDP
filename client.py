@@ -1,9 +1,9 @@
 import socket
 import json
 import random
-import time
 import binascii
 import zlib
+
 
 class UDPTCP_Client:
     def __init__(self, server_address, server_port, client_address, client_port):
@@ -16,14 +16,19 @@ class UDPTCP_Client:
         self.sequence_number = random.randint(0, 1000)  # Random initial sequence number
         self.ack_number = 0
         self.flags = '00000000'  # Initialize flags
-        self.timeout = 1  # Timeout in seconds
-        self.max_retries = 4  # Maximum number of retransmissions
 
     def display(self, packet):
         print("type: " + packet['type'])
         print("seq_num: " + str(packet['sequence_number']))
         print("ack_num: " + str(packet['ack_number']))
         print("flags: " + packet['flags'])
+        print("------------------------")
+
+    def display_self(self):
+        print("current state")
+        print("seq_num: " + str(self.sequence_number))
+        print("ack_num: " + str(self.ack_number))
+        print("flags: " + self.flags)
         print("------------------------")
 
     def calculate_checksum(self, data):
@@ -36,7 +41,7 @@ class UDPTCP_Client:
         syn_packet = {'type': 'SYN', 'sequence_number': self.sequence_number, 'ack_number': None,
                       'client_ip': self.client_address, 'client_port': self.client_port, 'flags': self.flags}
         self.socket.sendto(json.dumps(syn_packet).encode(), (self.server_address, self.server_port))
-        self.display(syn_packet)
+        #self.display(syn_packet)
 
         # Receive SYN-ACK packet
         syn_ack, _ = self.socket.recvfrom(1024)
@@ -56,7 +61,7 @@ class UDPTCP_Client:
             ack_packet['checksum'] = self.calculate_checksum(json.dumps(ack_packet))
 
             self.socket.sendto(json.dumps(ack_packet).encode(), (self.server_address, self.server_port))
-           # print("Client sent ACK")
+            print("Client sent ACK")
             # self.ack_number += 1
             return True
         else:
@@ -73,46 +78,54 @@ class UDPTCP_Client:
         # Calculate checksum and include it in the packet
         data_packet['checksum'] = self.calculate_checksum(json.dumps(data_packet))
 
-        retries = 0
-        while retries < self.max_retries:
-            # Send the data packet
-            self.socket.sendto(json.dumps(data_packet).encode(), (self.server_address, self.server_port))
+        self.socket.sendto(json.dumps(data_packet).encode(), (self.server_address, self.server_port))
 
-            start_time = time.time()
-            # Receive ACK packet with timeout
-            self.socket.settimeout(self.timeout)
-            try:
-                ack, _ = self.socket.recvfrom(1024)
-                ack_packet = json.loads(ack.decode())
-                self.display(ack_packet)
-                if ack_packet['type'] == 'ACK' and ack_packet['flags'][3] == '1':
-                    self.sequence_number += len(data)  # Increment sequence number by length of data
-                    self.ack_number = ack_packet['sequence_number'] + 1
-                    return True
-            except socket.timeout:
-                print("Timeout occurred, retransmitting data packet...")
-                retries += 1
-            finally:
-                end_time = time.time()
-                elapsed_time = end_time - start_time
-                if elapsed_time < self.timeout:
-                    time.sleep(self.timeout - elapsed_time)
-
-        print("Maximum retries reached, failed to send data.")
-        return False
-
+        # Receive ACK packet
+        ack, _ = self.socket.recvfrom(1024)
+        ack_packet = json.loads(ack.decode())
+        self.display(ack_packet)
+        if ack_packet['type'] == 'ACK' and ack_packet['flags'][3] == '1':
+            self.sequence_number += len(data)  # Increment sequence number by length of data
+            self.ack_number = data_packet['sequence_number'] + 1
+            return True
+        else:
+            print("Failed to send packet.")  # Handle error
+        
     def stop(self):
         self.socket.close()
 
+#    def start(self):
+#        if self.handshake():
+#            # Send HTTP request
+#            http_request = {'method': 'GET', 'url': '/example'}
+#            self.send_data(json.dumps(http_request))
+#        else:
+#            print("Failed to establish connection")
+
     def start(self):
         if self.handshake():
-            # Send HTTP request
-            http_request = {'method': 'GET', 'url': '/example'}
+            # Define HTTP headers
+            headers = {
+                'Host': 'example.com',
+                'User-Agent': 'MyClient/1.0',
+                'Accept': 'text/html',
+                'Content-Type': 'application/json',
+                # Add more headers as needed
+            }
+
+            # Define the HTTP request
+            http_request = {
+                'method': 'GET',
+                'url': '/example',
+                'headers': headers,  # Include the headers in the request
+            }
+
+            # Send HTTP request with headers
             self.send_data(json.dumps(http_request))
         else:
             print("Failed to establish connection")
 
+
 if __name__ == "__main__":
-    client = UDPTCP_Client('localhost', 8000, 'localhost',
-                           50506)  # Pass client's IP address and source port as arguments
+    client = UDPTCP_Client('localhost', 8000, 'localhost',50506)  # Pass client's IP address and source port as arguments
     client.start()
