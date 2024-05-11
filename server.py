@@ -40,7 +40,7 @@ class UDPTCP_Server:
             self.socket.sendto(json.dumps(syn_ack_packet).encode(), client_address)
 
             # Receive ACK packet
-            ack, _ = self.socket.recvfrom(1024)
+            ack, client_address = self.socket.recvfrom(1024)
             ack_packet = json.loads(ack.decode())
             self.display(ack_packet)
             if ack_packet['type'] == 'ACK' and ack_packet['sequence_number'] == self.ack_number and ack_packet['flags'][3]=='1':
@@ -54,18 +54,19 @@ class UDPTCP_Server:
 
     def receive_data(self):
         # Receive data packet
-        data, _ = self.socket.recvfrom(1024)
+        data, client_address = self.socket.recvfrom(1024)
         data_packet = json.loads(data.decode())
-        self.display_self()
-        self.display(data_packet)
+        #self.display_self()
         if data_packet['sequence_number'] == self.ack_number:
             self.display(data_packet)
             self.ack_number = data_packet['sequence_number'] + len(data_packet['data'])  # Update acknowledgment number
             self.sequence_number = data_packet['ack_number']
             # Send ACK packet
             self.flags = '00010000'  # Set ACK flag
-            ack_packet = {'type': 'ACK', 'sequence_number': self.sequence_number, 'ack_number': self.ack_number, 'flags':self.flags}
-            self.socket.sendto(json.dumps(ack_packet).encode(), (data_packet['client_ip'], data_packet['client_port']))
+            ack_packet = {'type': 'ACK', 'sequence_number': self.sequence_number, 'ack_number': self.ack_number,
+                              'client_ip': data_packet['client_ip'], 'client_port': data_packet['client_port'],
+                              'flags': self.flags}
+            self.socket.sendto(json.dumps(ack_packet).encode(), client_address)
             return data_packet['data']
         else:
             # Handle out of order
@@ -78,6 +79,7 @@ class UDPTCP_Server:
         # For simplicity, just print the request for now
 
     def start(self):
+
         if self.handshake():
             while True:
                 request = self.receive_data()

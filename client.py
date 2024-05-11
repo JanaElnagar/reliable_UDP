@@ -57,7 +57,7 @@ class UDPTCP_Client:
         # Send data packet
         self.flags = '00000000'  # Reset flags
         self.sequence_number += 1
-        data_packet = {'type': 'DATA', 'sequence_number': self.sequence_number, 'ack_number':self.ack_number, 'data': data, 'flags': self.flags}
+        data_packet = {'type': 'DATA', 'sequence_number': self.sequence_number, 'ack_number':self.ack_number,'client_ip': self.client_address, 'client_port': self.client_port, 'data': data, 'flags': self.flags}
 
         self.socket.sendto(json.dumps(data_packet).encode(), (self.server_address, self.server_port))
 
