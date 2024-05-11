@@ -112,7 +112,7 @@ class UDPTCP_Server:
                     # time.sleep(10)  # Delay for 2 seconds
                     
                     self.socket.sendto(json.dumps(ack_packet).encode(), client_address)
-                    self.display(ack_packet)
+                    #self.display(ack_packet)
 
                 return data_packet['data']
             else:
