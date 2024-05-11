@@ -1,6 +1,9 @@
 import socket
 import json
 import random
+import binascii
+import zlib
+
 
 class UDPTCP_Client:
     def __init__(self, server_address, server_port, client_address, client_port):
@@ -15,40 +18,51 @@ class UDPTCP_Client:
         self.flags = '00000000'  # Initialize flags
 
     def display(self, packet):
-        print("type: "+packet['type'])
-        print("seq_num: "+str(packet['sequence_number']))
-        print("ack_num: "+str(packet['ack_number']))
-        print("flags: "+packet['flags'])
+        print("type: " + packet['type'])
+        print("seq_num: " + str(packet['sequence_number']))
+        print("ack_num: " + str(packet['ack_number']))
+        print("flags: " + packet['flags'])
         print("------------------------")
 
     def display_self(self):
         print("current state")
-        print("seq_num: "+str(self.sequence_number))
-        print("ack_num: "+str(self.ack_number))
-        print("flags: "+self.flags)
+        print("seq_num: " + str(self.sequence_number))
+        print("ack_num: " + str(self.ack_number))
+        print("flags: " + self.flags)
         print("------------------------")
+
+    def calculate_checksum(self, data):
+        checksum = zlib.crc32(data.encode())
+        return checksum
 
     def handshake(self):
         # Send SYN packet with client's IP address and source port
         self.flags = '00000010'  # Set SYN flag
-        syn_packet = {'type': 'SYN', 'sequence_number': self.sequence_number, 'ack_number': None, 'client_ip': self.client_address, 'client_port': self.client_port, 'flags':self.flags}
+        syn_packet = {'type': 'SYN', 'sequence_number': self.sequence_number, 'ack_number': None,
+                      'client_ip': self.client_address, 'client_port': self.client_port, 'flags': self.flags}
         self.socket.sendto(json.dumps(syn_packet).encode(), (self.server_address, self.server_port))
         self.display(syn_packet)
 
         # Receive SYN-ACK packet
         syn_ack, _ = self.socket.recvfrom(1024)
         syn_ack_packet = json.loads(syn_ack.decode())
-        if syn_ack_packet['type'] == 'SYN-ACK' and syn_ack_packet['flags'][6] == '1' and syn_ack_packet['flags'][3] == '1':
+        if syn_ack_packet['type'] == 'SYN-ACK' and syn_ack_packet['flags'][6] == '1' and syn_ack_packet['flags'][
+            3] == '1':
             self.display(syn_ack_packet)
             self.sequence_number = syn_ack_packet['ack_number']
             self.ack_number = syn_ack_packet['sequence_number'] + 1
 
             # Send ACK packet
             self.flags = '00010000'  # Set ACK flag
-            ack_packet = {'type': 'ACK', 'sequence_number': self.sequence_number, 'ack_number': self.ack_number, 'client_ip': self.client_address, 'client_port': self.client_port, 'flags':self.flags}
+            ack_packet = {'type': 'ACK', 'sequence_number': self.sequence_number, 'ack_number': self.ack_number,
+                          'client_ip': self.client_address, 'client_port': self.client_port, 'flags': self.flags}
+
+            # Calculate checksum and include it in the packet
+            ack_packet['checksum'] = self.calculate_checksum(json.dumps(ack_packet))
+
             self.socket.sendto(json.dumps(ack_packet).encode(), (self.server_address, self.server_port))
             print("Client sent ACK")
-            #self.ack_number += 1
+            # self.ack_number += 1
             return True
         else:
             return False
@@ -57,7 +71,12 @@ class UDPTCP_Client:
         # Send data packet
         self.flags = '00000000'  # Reset flags
         self.sequence_number += 1
-        data_packet = {'type': 'DATA', 'sequence_number': self.sequence_number, 'ack_number':self.ack_number,'client_ip': self.client_address, 'client_port': self.client_port, 'data': data, 'flags': self.flags}
+        data_packet = {'type': 'DATA', 'sequence_number': self.sequence_number, 'ack_number': self.ack_number,
+                       'client_ip': self.client_address, 'client_port': self.client_port, 'data': data,
+                       'flags': self.flags}
+
+        # Calculate checksum and include it in the packet
+        data_packet['checksum'] = self.calculate_checksum(json.dumps(data_packet))
 
         self.socket.sendto(json.dumps(data_packet).encode(), (self.server_address, self.server_port))
 
@@ -83,6 +102,8 @@ class UDPTCP_Client:
         else:
             print("Failed to establish connection")
 
+
 if __name__ == "__main__":
-    client = UDPTCP_Client('localhost', 8000, 'localhost', 50506)  # Pass client's IP address and source port as arguments
+    client = UDPTCP_Client('localhost', 8000, 'localhost',
+                           50506)  # Pass client's IP address and source port as arguments
     client.start()
