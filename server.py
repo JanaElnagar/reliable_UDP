@@ -7,6 +7,7 @@ import time
 from collections import deque
 
 
+
 class UDPTCP_Server:
     def __init__(self, server_address, server_port, window_size):
         self.server_address = server_address
@@ -106,7 +107,10 @@ class UDPTCP_Server:
 
                     # Calculate checksum and include it in the ACK packet
                     ack_packet['checksum'] = self.calculate_checksum(json.dumps(ack_packet))
-
+                    
+                    # Introduce a delay to test stop-and-wait
+                    # time.sleep(10)  # Delay for 2 seconds
+                    
                     self.socket.sendto(json.dumps(ack_packet).encode(), client_address)
                     self.display(ack_packet)
 

@@ -6,6 +6,7 @@ import binascii
 import zlib
 from collections import deque
 
+
 class UDPTCP_Client:
     def __init__(self, server_address, server_port, client_address, client_port, window_size):
         self.server_address = server_address
@@ -113,6 +114,7 @@ class UDPTCP_Client:
                     elapsed_time = end_time - start_time
                     if elapsed_time < self.timeout:
                         time.sleep(self.timeout - elapsed_time)
+
 
         print("Maximum retries reached, failed to send data.")
         return False
