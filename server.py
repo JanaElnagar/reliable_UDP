@@ -3,7 +3,6 @@ import json
 import random
 import binascii
 import zlib
-import time
 
 
 class UDPTCP_Server:
@@ -102,9 +101,6 @@ class UDPTCP_Server:
                 # Calculate checksum and include it in the ACK packet
                 ack_packet['checksum'] = self.calculate_checksum(json.dumps(ack_packet))
 
-                # Introduce a delay to test stop-and-wait
-               # time.sleep(10)  # Delay for 2 seconds
-
                 self.socket.sendto(json.dumps(ack_packet).encode(), client_address)
                 return data_packet['data']
             else:
@@ -116,11 +112,58 @@ class UDPTCP_Server:
             return False
 
 
-    def handle_request(self, request):
-        # Handle HTTP request
-        print("Received HTTP request:", request)
-        # For simplicity, just print the request for now
+#    def handle_request(self, request):
+#        # Handle HTTP request
+#        print("Received HTTP request:", request)
+#        # For simplicity, just print the request for now
 
+    def handle_request(self, request):
+
+        # Simulate handling of requests
+        if request:
+            status_message = 'OK'
+            response_body = 'Welcome to the server!'
+        else:
+            status_message = 'NOT FOUND'
+            response_body = 'Page not found.'
+
+        print(status_message)
+    
+        # Construct HTTP response
+        http_response = f"HTTP/1.0 {status_message}\r\nContent-Length: {len(response_body)}\r\n\r\n{response_body}"
+
+        print(http_response)
+    
+        # Send HTTP response
+#        self.send_response(http_response)
+
+#   def send_response(self,response):
+#       # Split response into packets if it's longer than 1024 bytes
+#       while response:
+#           packet, response = response[:1024], response[1024:]
+#           # Prepare data packet
+#           data_packet = {'type': 'DATA', 'sequence_number': self.sequence_number, 'ack_number': self.ack_number,
+#                          'client_ip': self.client_address, 'client_port': self.client_port, 'data': packet,
+#                          'flags': self.flags}
+#   
+#           # Calculate checksum and include it in the packet
+#           data_packet['checksum'] = self.calculate_checksum(json.dumps(data_packet))
+#   
+#           # Send data packet
+#           self.socket.sendto(json.dumps(data_packet).encode(), (self.client_address, self.client_port))
+#   
+#           # Receive ACK packet
+#           ack, _ = self.socket.recvfrom(1024)
+#           ack_packet = json.loads(ack.decode())
+#           self.display(ack_packet)
+#           if ack_packet['type'] == 'ACK' and ack_packet['flags'][3] == '1':
+#               self.sequence_number += len(packet)  # Increment sequence number by length of data
+#               self.ack_number = data_packet['sequence_number'] + 1
+#           else:
+#               print("Failed to send packet.")  # Handle error
+    
+    
+    
     def start(self):
 
         if self.handshake():
