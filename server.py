@@ -7,7 +7,6 @@ import time
 from collections import deque
 
 
-
 class UDPTCP_Server:
     def __init__(self, server_address, server_port, window_size):
         self.server_address = server_address
@@ -25,13 +24,6 @@ class UDPTCP_Server:
         print("seq_num: " + str(packet['sequence_number']))
         print("ack_num: " + str(packet['ack_number']))
         print("flags: " + packet['flags'])
-        print("------------------------")
-
-    def display_self(self):
-        print("current state")
-        print("seq_num: " + str(self.sequence_number))
-        print("ack_num: " + str(self.ack_number))
-        print("flags: " + self.flags)
         print("------------------------")
 
     def calculate_checksum(self, data):
@@ -87,6 +79,8 @@ class UDPTCP_Server:
         data, client_address = self.socket.recvfrom(1024)
         data_packet = json.loads(data.decode())
 
+        #data_packet = self.simulate_false_checksum(data_packet)    # for checksum testing
+
         # Verify checksum
         if self.verify_checksum(data_packet):
             # Check if the sequence number is within the window
@@ -107,14 +101,11 @@ class UDPTCP_Server:
 
                     # Calculate checksum and include it in the ACK packet
                     ack_packet['checksum'] = self.calculate_checksum(json.dumps(ack_packet))
-                    
                     # Introduce a delay to test stop-and-wait
-                    # time.sleep(10)  # Delay for 2 seconds
-                    
+                    #time.sleep(10)  # Delay for 10 seconds
                     self.socket.sendto(json.dumps(ack_packet).encode(), client_address)
-                    #self.display(ack_packet)
 
-                return data_packet['data']
+                return data_packet['data'], (data_packet['client_ip'], data_packet['client_port'])
             else:
                 # Handle out of order
                 print("Packet out of order, dropping...")
@@ -123,65 +114,100 @@ class UDPTCP_Server:
             print("Checksum verification failed. Dropping packet.")
             return False
 
+    def handle_http_request(self, http_request, client_address):
+        method = http_request.get('method')
+        url = http_request.get('url')
+        headers = http_request.get('headers', {})
+        body = http_request.get('body', '')
 
-#    def handle_request(self, request):
-#        # Handle HTTP request
-#        print("Received HTTP request:", request)
-#        # For simplicity, just print the request for now
-
-    def handle_request(self, request):
-
-        # Simulate handling of requests
-        if request:
-            status_message = 'OK'
-            response_body = 'Welcome to the server!'
+        # Handle HTTP request based on the method
+        if method == 'GET':
+            # Process GET request
+            response_body = 'This is a GET response'
+            status_code = 200  # OK
+        elif method == 'POST':
+            # Process POST request
+            response_body = f'This is a POST response. Received data: {body}'
+            status_code = 200  # OK
         else:
-            status_message = 'NOT FOUND'
-            response_body = 'Page not found.'
+            # Unsupported method
+            response_body = 'Unsupported HTTP method'
+            status_code = 405  # Method Not Allowed
 
-        print(status_message)
-    
         # Construct HTTP response
-        http_response = f"HTTP/1.0 {status_message}\r\nContent-Length: {len(response_body)}\r\n\r\n{response_body}"
+        http_response = f'HTTP/1.0 {status_code}\r\nContent-Length: {len(response_body)}\r\n\r\n{response_body}'
 
-        print(http_response)
-    
-        # Send HTTP response
-#        self.send_response(http_response)
+        # Split the HTTP response into packets
+        packets = [http_response[i:i + 100] for i in range(0, len(http_response), 100)]
 
-#   def send_response(self,response):
-#       # Split response into packets if it's longer than 1024 bytes
-#       while response:
-#           packet, response = response[:1024], response[1024:]
-#           # Prepare data packet
-#           data_packet = {'type': 'DATA', 'sequence_number': self.sequence_number, 'ack_number': self.ack_number,
-#                          'client_ip': self.client_address, 'client_port': self.client_port, 'data': packet,
-#                          'flags': self.flags}
-#   
-#           # Calculate checksum and include it in the packet
-#           data_packet['checksum'] = self.calculate_checksum(json.dumps(data_packet))
-#   
-#           # Send data packet
-#           self.socket.sendto(json.dumps(data_packet).encode(), (self.client_address, self.client_port))
-#   
-#           # Receive ACK packet
-#           ack, _ = self.socket.recvfrom(1024)
-#           ack_packet = json.loads(ack.decode())
-#           self.display(ack_packet)
-#           if ack_packet['type'] == 'ACK' and ack_packet['flags'][3] == '1':
-#               self.sequence_number += len(packet)  # Increment sequence number by length of data
-#               self.ack_number = data_packet['sequence_number'] + 1
-#           else:
-#               print("Failed to send packet.")  # Handle error
-    
-    
-    
+        # Send HTTP response packets
+        for packet_data in packets:
+            # Update sequence number before sending
+            self.sequence_number += len(packet_data)
+
+            # Send packet
+            packet = {'type': 'HTTP/1.0', 'sequence_number': self.sequence_number, 'ack_number': self.ack_number,
+                      'client_ip': client_address[0], 'client_port': client_address[1], 'data': packet_data,
+                      'flags': '00011000'}  # Set ACK and PUSH flags
+
+            # Calculate checksum and include it in the packet
+            packet['checksum'] = self.calculate_checksum(json.dumps(packet))
+
+            # Send packet
+            self.socket.sendto(json.dumps(packet).encode(), client_address)
+            print(f"Sent packet with sequence number: {packet['sequence_number']}")
+
+            # Receive acknowledgment
+            self.socket.settimeout(1)  # Set a timeout for acknowledgment
+            try:
+                ack, _ = self.socket.recvfrom(1024)
+                ack_packet = json.loads(ack.decode())
+                self.display(ack_packet)
+                if ack_packet['type'] == 'ACK' and ack_packet['sequence_number'] == packet['sequence_number']:
+                    print(f"Received ACK for sequence number: {ack_packet['sequence_number']}")
+            except socket.timeout:
+                print("Timeout occurred while waiting for acknowledgment. Retransmitting...")
+
+        # Send FIN+ACK packet
+        end_msg = 'FIN'
+        # Update sequence number before sending
+        self.sequence_number += len(end_msg)
+
+        # Send FIN+ACK response
+        fin_ack_packet = {'type': 'FIN-ACK', 'sequence_number': self.sequence_number, 'ack_number': self.ack_number,
+                          'client_ip': client_address[0], 'client_port': client_address[1], 'data': end_msg,
+                          'flags': '00010001'}  # Set ACK and PUSH flags
+
+        # Calculate checksum and include it in the response packet
+        fin_ack_packet['checksum'] = self.calculate_checksum(json.dumps(fin_ack_packet))
+        self.socket.sendto(json.dumps(fin_ack_packet).encode(), client_address)
+
+        # Wait for acknowledgment of FIN+ACK packet
+        acknowledged = False
+        while not acknowledged:
+            try:
+                ack, _ = self.socket.recvfrom(1024)
+                ack_packet = json.loads(ack.decode())
+                self.display(ack_packet)
+                if ack_packet['type'] == 'ACK' and ack_packet['sequence_number'] == self.sequence_number:
+                    acknowledged = True
+                    print(f"Received ACK for FIN-ACK packet with sequence number: {ack_packet['sequence_number']}")
+                    break
+            except socket.timeout:
+                print("Timeout occurred while waiting for acknowledgment of FIN-ACK packet. Retransmitting...")
+
     def start(self):
-
         if self.handshake():
             while True:
-                request = self.receive_data()
-                self.handle_request(request)
+                request, client_address = self.receive_data()
+                if request:
+                    try:
+                        http_request = json.loads(request)
+                        self.handle_http_request(http_request, client_address)
+                    except json.JSONDecodeError:
+                        print("Invalid JSON data received. Dropping request.")
+                else:
+                    print("No data received from client.")
         else:
             print("Failed to establish connection")
 
@@ -189,4 +215,3 @@ class UDPTCP_Server:
 if __name__ == "__main__":
     server = UDPTCP_Server('localhost', 8000, window_size=5)  # Provide the window_size argument
     server.start()
-
