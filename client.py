@@ -175,9 +175,21 @@ class UDPTCP_Client:
                 'headers': headers,  # Include the headers in the request
             }
 
-            # Send HTTP request with headers
+            # Send HTTP GET request with headers
             if self.send_data(json.dumps(http_request)):  # if request sent successfully (and first ack received)
                 self.receive_http_response()              # receive http response data
+
+            # Define a sample POST request body
+            post_body = '{"key": "value"}'
+            # Send HTTP POST request with headers and body
+            post_request = {
+                'method': 'POST',
+                'url': '/example',
+                'headers': headers,  # Include the headers in the request
+                'body': post_body   # Include the body in the request
+            }
+            if self.send_data(json.dumps(post_request)):  # if request sent successfully (and first ack received)
+                self.receive_http_response()               # receive http response data
         else:
             print("Failed to establish connection")
 
