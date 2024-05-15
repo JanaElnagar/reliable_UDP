@@ -5,6 +5,8 @@ import binascii
 import zlib
 import time
 from collections import deque
+import server_test
+
 
 
 class UDPTCP_Server:
@@ -76,7 +78,9 @@ class UDPTCP_Server:
             ack_packet = json.loads(ack.decode())
             if ack_packet['type'] == 'ACK' and ack_packet['ack_number'] == self.expected_ack_number and ack_packet['flags'][3] == '1':
                 self.display(ack_packet)
-
+                # self.sequence_number = ack_packet['ack_number']
+                # self.ack_number = ack_packet['sequence_number'] + len(ack_packet)
+                #self.display_self()
                 return True
             else:
                 return False
@@ -92,7 +96,7 @@ class UDPTCP_Server:
             # Rest of the code for processing the received packet...
             if data_packet:
 
-                #data_packet = self.simulate_false_checksum(data_packet)    # for checksum testing
+                # data_packet = self.simulate_false_checksum(data_packet)    # for checksum testing
 
                 # Verify packet integrity and process the packet
                 if self.verify_checksum(data_packet):
@@ -106,6 +110,7 @@ class UDPTCP_Server:
                             packet_to_process = self.window.popleft()
                             self.ack_number = packet_to_process['sequence_number'] + len(packet_to_process)
                             self.sequence_number = packet_to_process['ack_number']
+                            #self.display_self()
 
                             # Send ACK packet
                             self.flags = '00010000'  # Set ACK flag
@@ -115,12 +120,13 @@ class UDPTCP_Server:
 
                             # Calculate checksum and include it in the ACK packet
                             ack_packet['checksum'] = self.calculate_checksum(json.dumps(ack_packet))
-
+                            
                             # Introduce a delay to test stop-and-wait
-                            #time.sleep(10)  # Delay for 10 seconds
+                            # time.sleep(10)  # Delay for 10 seconds
 
                             self.socket.sendto(json.dumps(ack_packet).encode(), client_address)
                             self.expected_ack_number = self.sequence_number + len(ack_packet)
+                            print("EXPECTED ACK: " + str(self.expected_ack_number))
                         return data_packet['data'], (data_packet['client_ip'], data_packet['client_port'])
                     else:
                         print("Packet out of order, dropping...")
@@ -250,5 +256,11 @@ class UDPTCP_Server:
 
 
 if __name__ == "__main__":
+
+    # Create a server instance
     server = UDPTCP_Server('localhost', 8000, window_size=5)  # Provide the window_size argument
+
+    #Test case 1: Successful HTTP GET Request 
+    #server_test.TestUDPTCPServer.simulate_multiple_responses
+    
     server.start()
